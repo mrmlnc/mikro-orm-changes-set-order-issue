@@ -1,51 +1,68 @@
-import { Entity, MikroORM, PrimaryKey, Property } from '@mikro-orm/sqlite';
+import {
+	Embeddable,
+	Embedded,
+	Entity,
+	PrimaryKey,
+	PrimaryKeyProp,
+	Property,
+	types as PropertyType,
+} from '@mikro-orm/core';
+import { MikroORM } from '@mikro-orm/sqlite';
 
-@Entity()
-class User {
+@Embeddable()
+class CustomFieldValueEntity {
+	@Property({ type: PropertyType.json })
+	value!: string | number | boolean | null;
+}
 
-  @PrimaryKey()
-  id!: number;
+@Entity({
+	tableName: 'custom_field',
+})
+class CustomFieldEntity {
+	[PrimaryKeyProp]?: 'sid' = 'sid';
 
-  @Property()
-  name: string;
+	@PrimaryKey()
+	sid!: number;
 
-  @Property({ unique: true })
-  email: string;
-
-  constructor(name: string, email: string) {
-    this.name = name;
-    this.email = email;
-  }
-
+	@Embedded(() => CustomFieldValueEntity, { array: true })
+	values: CustomFieldValueEntity[] = [];
 }
 
 let orm: MikroORM;
 
 beforeAll(async () => {
-  orm = await MikroORM.init({
-    dbName: ':memory:',
-    entities: [User],
-    debug: ['query', 'query-params'],
-    allowGlobalContext: true, // only for testing
-  });
-  await orm.schema.refreshDatabase();
+	orm = await MikroORM.init({
+		dbName: ':memory:',
+		entities: [CustomFieldEntity],
+		// debug: ['query', 'query-params'],
+		allowGlobalContext: true,
+	});
+
+	await orm.schema.refreshDatabase();
 });
 
 afterAll(async () => {
-  await orm.close(true);
+	await orm.close(true);
 });
 
-test('basic CRUD example', async () => {
-  orm.em.create(User, { name: 'Foo', email: 'foo' });
-  await orm.em.flush();
-  orm.em.clear();
+it('test', async () => {
+	await orm.em.createQueryBuilder(CustomFieldEntity)
+		.insert({
+			values: [
+				{ value: 'string' },
+				{ value: 11.75 },
+				{ value: false },
+				// { value: null }
+			]
+		})
+		.execute('run');
 
-  const user = await orm.em.findOneOrFail(User, { email: 'foo' });
-  expect(user.name).toBe('Foo');
-  user.name = 'Bar';
-  orm.em.remove(user);
-  await orm.em.flush();
+	await orm.em.flush();
+	orm.em.clear();
 
-  const count = await orm.em.count(User, { email: 'foo' });
-  expect(count).toBe(0);
+	const result = await orm.em.findAll(CustomFieldEntity, { refresh: true });
+
+	const actual = result[0].values.map(it => it.value);
+
+	expect(actual).toStrictEqual(['string', 11.75, false,]);
 });
