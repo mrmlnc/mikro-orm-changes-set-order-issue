@@ -84,10 +84,15 @@ it('test', async () => {
 	await orm.em.flush();
 	orm.em.clear();
 
-	const revisions = await testCaseRevisionRepository.createQueryBuilder('t0')
-		.select('*')
-		.innerJoinAndSelect('t0.testCase', 't1')
-		.getResultList();
+	const revisions = await testCaseRevisionRepository.findAll({
+		populate: ['testCase'],
+	});
+
+	// The same problem
+	// const revisions = await testCaseRevisionRepository.createQueryBuilder('t0')
+	// 	.select('*')
+	// 	.innerJoinAndSelect('t0.testCase', 't1')
+	// 	.getResultList();
 
 	const testCases = revisions.map(it => it.testCase);
 
@@ -101,7 +106,7 @@ it('test', async () => {
 	orm.em.assign(testCases[1], { name: 'a0' });
 	orm.em.assign(testCases[2], { name: 'b0' });
 
-	// All correct
+	// The correct data is stored in the change sets.
 	orm.em.getUnitOfWork().computeChangeSets();
 	const changeSets = orm.em.getUnitOfWork().getChangeSets().map(it => it.entity);
 	expect(changeSets).toMatchObject([
@@ -110,6 +115,7 @@ it('test', async () => {
 		{ name: 'b0', version: 100, id: 2 },
 	]);
 
+	// After this command, the data is broken.
 	await orm.em.persistAndFlush(testCases);
 
 	console.log(testCases.map(it => ([it.id, it.name, it.version])));
